@@ -31,6 +31,13 @@ interface WebhookReturn {
 
 type ExcludedWebhookReturn = Omit<WebhookReturn, "hmac">;
 
+/**
+ * Generates an HMAC SHA-256 signature for HitPay webhook payload.
+ *
+ * @param secret - The salt key used to sign the payload.
+ * @param vals - The key-value pairs from the webhook payload excluding HMAC.
+ * @returns The hex-encoded HMAC SHA-256 signature.
+ */
 function generateSignatureArray<T>(secret: string, vals: T) {
   const source: string[] = [];
   Object.keys(vals as { [K: string]: string })
@@ -44,6 +51,12 @@ function generateSignatureArray<T>(secret: string, vals: T) {
   return signed;
 }
 
+/**
+ * Handles incoming HitPay payment webhooks with constant-time HMAC signature verification.
+ *
+ * @param req - The incoming Next.js API request.
+ * @param res - The outgoing Next.js API response.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== "POST") {
@@ -100,6 +113,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         statusCode: 204,
         message: `${isSandbox ? "Sandbox" : "Production"} Credentials not found`,
       });
+    }
+
+    if (!obj.hmac || typeof obj.hmac !== "string") {
+      throw new HttpCode({ statusCode: 400, message: "Bad Request" });
     }
 
     const { saltKey } = keyObj;

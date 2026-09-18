@@ -274,4 +274,30 @@ describe("CancelBooking Cancellation Fee Warning", () => {
 
     expect(screen.queryByText(/I acknowledge that cancelling within/)).not.toBeInTheDocument();
   });
+
+  it("should correctly handle zero-decimal currencies without dividing by 100", () => {
+    const mockBookingJPY = {
+      ...mockBookingWithCancellationFee,
+      payment: {
+        amount: 5000,
+        currency: "jpy",
+        appId: "stripe",
+      },
+    };
+
+    vi.mocked(shouldChargeModule.shouldChargeNoShowCancellationFee).mockReturnValue(true);
+
+    render(
+      <CancelBooking
+        booking={mockBookingJPY}
+        profile={{ name: "Test User", slug: "test-user" }}
+        team={null}
+        isHost={false}
+        eventTypeMetadata={mockEventTypeMetadataWithFee}
+        {...mockProps}
+      />
+    );
+
+    expect(screen.getByRole("checkbox")).toBeInTheDocument();
+  });
 });

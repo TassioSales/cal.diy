@@ -196,4 +196,40 @@ describe("isEqual", () => {
       ).toBe(false);
     });
   });
+
+  describe("exotic built-ins", () => {
+    it("returns true for the same Map reference", () => {
+      const map = new Map([["a", 1]]);
+
+      expect(isEqual(map, map)).toBe(true);
+    });
+
+    it("does not call two different Maps equal just because neither has own keys", () => {
+      expect(isEqual(new Map([["a", 1]]), new Map())).toBe(false);
+      expect(isEqual(new Map([["a", 1]]), new Map([["a", 1]]))).toBe(false);
+    });
+
+    it("does not call two different Sets equal just because neither has own keys", () => {
+      expect(isEqual(new Set([1, 2]), new Set())).toBe(false);
+      expect(isEqual(new Set([1, 2]), new Set([1, 2]))).toBe(false);
+    });
+
+    it("does not compare a Map against a plain object", () => {
+      expect(isEqual(new Map(), {})).toBe(false);
+      expect(isEqual({}, new Set())).toBe(false);
+    });
+
+    it("still compares class instances by their own enumerable keys", () => {
+      class Point {
+        constructor(
+          public x: number,
+          public y: number
+        ) {}
+      }
+
+      expect(isEqual(new Point(1, 2), new Point(1, 2))).toBe(true);
+      expect(isEqual(new Point(1, 2), new Point(1, 3))).toBe(false);
+    });
+  });
+
 });

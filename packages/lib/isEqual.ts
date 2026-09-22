@@ -1,7 +1,9 @@
 /**
  * Performs a deep comparison between two values to determine if they are equivalent.
  *
- * Supports primitives, NaN equality, Date objects, RegExp instances, Arrays, and plain Objects.
+ * Supports primitives, NaN equality, Date objects, RegExp instances, Arrays, plain Objects and
+ * class instances. Exotic built-ins such as Map and Set compare as unequal unless they are the
+ * same reference.
  * Distinguishes between arrays and plain objects, and handles edge cases such as invalid dates.
  *
  * @param value - The first value to compare.
@@ -16,6 +18,7 @@
  * isEqual(/abc/g, /abc/g); // true
  * isEqual(NaN, NaN); // true
  * isEqual([1], { 0: 1 }); // false
+ * isEqual(new Map([["a", 1]]), new Map()); // false
  * ```
  */
 export function isEqual(value: unknown, other: unknown): boolean {
@@ -59,8 +62,12 @@ export function isEqual(value: unknown, other: unknown): boolean {
     return value.every((val, i) => isEqual(val, other[i]));
   }
 
-  // Disallow comparison between different object tags/types
-  if (Object.prototype.toString.call(value) !== Object.prototype.toString.call(other)) {
+  // Anything past this point is compared by its own enumerable keys, which describes plain
+  // objects and class instances but not exotic built-ins: two Maps or Sets both report zero
+  // own keys, so a key-based comparison would call every pair of them equal. Refuse those
+  // rather than answer wrongly; identical references already returned true above.
+  const valueTag = Object.prototype.toString.call(value);
+  if (valueTag !== Object.prototype.toString.call(other) || valueTag !== "[object Object]") {
     return false;
   }
 

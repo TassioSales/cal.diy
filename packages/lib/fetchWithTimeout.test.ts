@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { fetchWithTimeout } from "./fetchWithTimeout";
 
 describe("fetchWithTimeout", () => {
@@ -107,12 +108,46 @@ describe("fetchWithTimeout", () => {
     await expect(promise).rejects.toThrow("Failed to fetch (DNS resolution failed)");
   });
 
-  it("should use default timeout of 5000ms when not specified", async () => {
-    const mockResponse = new Response("default timeout ok", { status: 200 });
-    const mockFetch = vi.fn().mockResolvedValue(mockResponse);
+  it("should detach its listener from the external signal once the request settles", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", mockFetch);
 
-    const response = await fetchWithTimeout("https://api.example.com/default");
-    expect(response.status).toBe(200);
+    const external = new AbortController();
+    const addSpy = vi.spyOn(external.signal, "addEventListener");
+    const removeSpy = vi.spyOn(external.signal, "removeEventListener");
+
+    await fetchWithTimeout("https://api.example.com/data", { signal: external.signal }, 5000);
+
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy.mock.calls[0][1]).toBe(addSpy.mock.calls[0][1]);
+  });
+
+  it("should detach its listener from the external signal when the request rejects", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const external = new AbortController();
+    const removeSpy = vi.spyOn(external.signal, "removeEventListener");
+
+    await expect(
+      fetchWithTimeout("https://unreachable.domain/api", { signal: external.signal }, 5000)
+    ).rejects.toThrow("Failed to fetch");
+
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not leak a listener per request on a long-lived external signal", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("ok", { status: 200 })));
+
+    const external = new AbortController();
+    const addSpy = vi.spyOn(external.signal, "addEventListener");
+    const removeSpy = vi.spyOn(external.signal, "removeEventListener");
+
+    for (let i = 0; i < 5; i++) {
+      await fetchWithTimeout("https://api.example.com/data", { signal: external.signal }, 5000);
+    }
+
+    expect(addSpy).toHaveBeenCalledTimes(5);
+    expect(removeSpy).toHaveBeenCalledTimes(5);
   });
 });

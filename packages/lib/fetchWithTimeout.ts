@@ -3,16 +3,15 @@
  *
  * Ensures that if the caller passes their own `options.signal` (e.g. from an HTTP request or user cancellation),
  * the request is aborted if EITHER the timeout expires OR the external signal is aborted.
- * Also cleans up the timeout timer upon completion and prevents event loop hangs using `unref()` where available.
+ * The timer and the listener on the caller's signal are both released once the request settles.
  *
  * @param url - The URL, URL object, or Request object to fetch.
  * @param options - Standard fetch RequestInit options, including headers, method, body, and optional `signal`.
- * @param timeoutMs - The timeout in milliseconds after which the request is aborted. Defaults to 5000ms.
+ * @param timeoutMs - The timeout in milliseconds after which the request is aborted.
  * @returns A promise that resolves to the Response object.
  *
  * @example
  * ```ts
- * // Simple usage with a 5-second timeout
  * const res = await fetchWithTimeout("https://api.example.com/data", {}, 5000);
  *
  * // Combined with caller's own cancellation signal
@@ -27,42 +26,37 @@
 export async function fetchWithTimeout(
   url: string | URL | Request,
   options: RequestInit = {},
-  timeoutMs: number = 5000
+  timeoutMs: number
 ): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout((): void => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Avoid keeping the Node.js event loop alive unnecessarily
+  // A caller that abandons the promise never reaches the `finally` below, and the pending timer
+  // would hold the Node event loop open for the rest of the timeout.
   if (typeof timer.unref === "function") {
     timer.unref();
   }
 
-  let signal: AbortSignal = controller.signal;
+  const externalSignal = options.signal;
+  const forwardExternalAbort = () => controller.abort(externalSignal?.reason);
 
-  if (options.signal) {
-    if (typeof AbortSignal.any === "function") {
-      signal = AbortSignal.any([controller.signal, options.signal]);
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
     } else {
-      const combined = new AbortController();
-      const onAbort = (): void => combined.abort();
-
-      if (options.signal.aborted || controller.signal.aborted) {
-        combined.abort();
-      } else {
-        options.signal.addEventListener("abort", onAbort, { once: true });
-        controller.signal.addEventListener("abort", onAbort, { once: true });
-      }
-      signal = combined.signal;
+      externalSignal.addEventListener("abort", forwardExternalAbort, { once: true });
     }
   }
 
   try {
-    const response = await fetch(url, {
+    return await fetch(url, {
       ...options,
-      signal,
+      signal: controller.signal,
     });
-    return response;
   } finally {
     clearTimeout(timer);
+    // `{ once: true }` only detaches after the event fires, so a request that completes normally
+    // would otherwise leave this listener on a caller signal that may outlive many requests.
+    externalSignal?.removeEventListener("abort", forwardExternalAbort);
   }
 }

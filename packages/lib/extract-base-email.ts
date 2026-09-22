@@ -1,16 +1,26 @@
 /**
- * Extracts the base email address by stripping any '+' alias tags from the local part.
- * Returns the original string safely if the email format is missing or invalid.
+ * Strips any "+" alias tag from an email's local part, so that a tagged address and its base
+ * compare equal. Callers use the result to match attendees against one another.
  *
- * @param email - The email address to extract the base email from.
- * @returns The base email address without subaddressing/aliases.
+ * @param email - The email address to reduce to its base form.
+ * @returns The address without its alias tag, the input unchanged when it holds no "@", or an
+ *          empty string when the input is not a string at all.
  */
 export const extractBaseEmail = (email: string): string => {
-  if (!email || typeof email !== "string" || !email.includes("@")) {
-    return email || "";
+  // The declared return type is what callers rely on — several of them go straight into
+  // .toLowerCase() — so anything that is not a string leaves as one.
+  if (typeof email !== "string") {
+    return "";
   }
+
+  // Splitting a string with no "@" left the domain undefined and produced "<input>@undefined",
+  // which made unrelated malformed entries compare equal to each other.
+  if (!email.includes("@")) {
+    return email;
+  }
+
   const [localPart, ...domainParts] = email.split("@");
-  const domain = domainParts.join("@");
   const baseLocalPart = localPart.split("+")[0];
-  return `${baseLocalPart}@${domain}`;
+
+  return `${baseLocalPart}@${domainParts.join("@")}`;
 };

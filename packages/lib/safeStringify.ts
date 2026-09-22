@@ -1,9 +1,15 @@
 /**
- * Creates a JSON replacer function that handles circular references, BigInts, and nested Errors.
+ * Creates a JSON replacer that handles BigInts, nested Errors, and true circular references.
+ *
+ * Circularity is decided against the current ancestor chain rather than a set of every value
+ * already seen, so a value referenced twice as a sibling (a DAG, not a cycle) still serializes
+ * in full. `JSON.stringify` invokes the replacer with `this` bound to the holder of `value`,
+ * which is what lets the chain be unwound to the current parent.
  */
-function getCircularReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet();
-  return (_key: string, value: unknown) => {
+function getCircularReplacer(): (this: unknown, key: string, value: unknown) => unknown {
+  const ancestors: unknown[] = [];
+
+  return function (this: unknown, _key: string, value: unknown) {
     if (typeof value === "bigint") {
       return value.toString();
     }
@@ -14,12 +20,18 @@ function getCircularReplacer(): (key: string, value: unknown) => unknown {
         stack: value.stack,
       };
     }
-    if (typeof value === "object" && value !== null) {
-      if (seen.has(value)) {
-        return "[Circular]";
-      }
-      seen.add(value);
+    if (typeof value !== "object" || value === null) {
+      return value;
     }
+
+    while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+      ancestors.pop();
+    }
+    if (ancestors.indexOf(value) !== -1) {
+      return "[Circular]";
+    }
+    ancestors.push(value);
+
     return value;
   };
 }

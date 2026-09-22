@@ -80,6 +80,19 @@ describe("isKeyInObject", () => {
       expect(isKeyInObject("ownField", child)).toBe(true);
       expect(isKeyInObject("inheritedField", child)).toBe(false);
     });
+
+    it("should return false for a class method, which lives on the prototype", () => {
+      class FeatureFlags {
+        enabled = true;
+        isEnabled() {
+          return this.enabled;
+        }
+      }
+      const flags = new FeatureFlags();
+
+      expect(isKeyInObject("enabled", flags)).toBe(true);
+      expect(isKeyInObject("isEnabled", flags)).toBe(false);
+    });
   });
 
   describe("TypeScript type narrowing", () => {

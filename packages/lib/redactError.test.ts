@@ -76,7 +76,7 @@ describe("redactError", () => {
     expect(mockLogError).toHaveBeenCalledTimes(1);
   });
 
-  it("should redact errors with Prisma error code starting with P even if name is generic Error", () => {
+  it("should redact errors carrying a Prisma error code even if name is generic Error", () => {
     envState.isProduction = true;
     mockLogError.mockClear();
 
@@ -113,5 +113,34 @@ describe("redactError", () => {
     expect(() => redactError(circularError)).not.toThrow();
     const result = redactError(circularError);
     expect((result as Error).message).toBe("An error occurred while querying the database.");
+  });
+
+  describe("non-Prisma error codes", () => {
+    it.each([
+      ["PARSE_ERROR"],
+      ["PERMISSION_DENIED"],
+      ["PAYLOAD_TOO_LARGE"],
+      ["P"],
+      ["P123"],
+      ["P12345"],
+      ["ECONNREFUSED"],
+    ])("should not redact an error whose code is %s", (code) => {
+      envState.isProduction = true;
+      const error = Object.assign(new Error("Upstream call failed"), { code });
+
+      expect(redactError(error)).toBe(error);
+    });
+
+    it.each([["P1001"], ["P2002"], ["P2025"], ["P6100"]])(
+      "should redact an error whose code is %s in production",
+      (code) => {
+        envState.isProduction = true;
+        const error = Object.assign(new Error("Record not found"), { code });
+        const result = redactError(error);
+
+        expect(result).not.toBe(error);
+        expect((result as Error).message).toBe("An error occurred while querying the database.");
+      }
+    );
   });
 });

@@ -1,16 +1,21 @@
 import logger from "@calcom/lib/logger";
+
 import { IS_PRODUCTION } from "./constants";
 import { safeStringify } from "./safeStringify";
 
 const log = logger.getSubLogger({ prefix: [`[redactError]`] });
 
+// Prisma error codes are always "P" followed by exactly four digits (P1001, P2002, P6100...).
+// Matching on the "P" prefix alone would also swallow unrelated codes such as PARSE_ERROR or
+// PERMISSION_DENIED and report them to the caller as database failures.
+const PRISMA_ERROR_CODE = /^P\d{4}$/;
+
 function shouldRedact(error: Error): boolean {
-  const n = error.name || "";
-  let code = "";
-  if ("code" in error && typeof (error as { code?: unknown }).code === "string") {
-    code = (error as { code: string }).code;
+  if (/Prisma/i.test(error.name || "")) {
+    return true;
   }
-  return /Prisma/i.test(n) || code.startsWith("P");
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" && PRISMA_ERROR_CODE.test(code);
 }
 
 /**
@@ -32,5 +37,3 @@ export const redactError = <T extends Error | unknown>(error: T): T | Error => {
   }
   return error;
 };
-
-export default redactError;

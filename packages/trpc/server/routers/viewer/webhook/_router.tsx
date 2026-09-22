@@ -22,7 +22,7 @@ type WebhookRouterHandlerCache = {
 const UNSTABLE_HANDLER_CACHE: WebhookRouterHandlerCache = {};
 
 export const webhookRouter = router({
-  list: createWebhookProcedure()
+  list: createWebhookProcedure("read")
     .input(ZListInputSchema)
     .query(async ({ ctx, input }): Promise<Webhook[]> => {
       if (!UNSTABLE_HANDLER_CACHE.list) {
@@ -40,7 +40,7 @@ export const webhookRouter = router({
       });
     }),
 
-  get: createWebhookProcedure()
+  get: createWebhookProcedure("read")
     .input(ZGetInputSchema)
     .query(async ({ ctx, input }) => {
       if (!UNSTABLE_HANDLER_CACHE.get) {
@@ -132,7 +132,7 @@ export const webhookRouter = router({
       });
     }),
 
-  getByViewer: createWebhookProcedure().query(
+  getByViewer: createWebhookProcedure("read").query(
     async ({ ctx }): Promise<import("./getByViewer.handler").WebhooksByViewer> => {
       if (!UNSTABLE_HANDLER_CACHE.getByViewer) {
         UNSTABLE_HANDLER_CACHE.getByViewer = await import("./getByViewer.handler").then(

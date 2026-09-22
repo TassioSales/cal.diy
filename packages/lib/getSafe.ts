@@ -7,11 +7,13 @@
  * @returns The value at the specified path or undefined.
  */
 export function getSafe<T>(obj: unknown, path?: (string | number)[] | null): T | undefined {
-  if (!path || !Array.isArray(path)) {
+  if (!Array.isArray(path)) {
     return undefined;
   }
-  return path.reduce(
-    (acc, key) => (typeof acc === "object" && acc !== null ? (acc as any)[key] : undefined),
+
+  return path.reduce<unknown>(
+    (acc, key) =>
+      typeof acc === "object" && acc !== null ? (acc as Record<string | number, unknown>)[key] : undefined,
     obj
   ) as T | undefined;
 }

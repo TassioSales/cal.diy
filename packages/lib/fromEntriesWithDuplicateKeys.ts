@@ -5,7 +5,7 @@
  * into arrays instead of overwriting earlier entries.
  *
  * Safely handles `null`, `undefined`, or empty iterables, and protects against prototype
- * pollution (`__proto__`, `constructor`) and own-property collisions (e.g. key `"hasOwnProperty"`).
+ * pollution via `__proto__` and own-property collisions (e.g. a key named `"hasOwnProperty"`).
  *
  * @param entries - An iterable of `[key, value]` tuples (e.g. `URLSearchParams.entries()`, `Map.entries()`, or arrays), or null/undefined.
  * @returns A record mapping keys to single string values or arrays of string values.
@@ -31,13 +31,18 @@ export function fromEntriesWithDuplicateKeys(
     return result;
   }
 
-  for (const [key, value] of entries) {
-    // Guard against prototype pollution
-    if (key === "__proto__" || key === "constructor") {
+  // `for...of` over a bare Iterable needs downlevelIteration, which this repo does not enable
+  // under its es5 target, so the entries are materialised first.
+  for (const [key, value] of Array.from(entries)) {
+    // Assigning "__proto__" on an object literal invokes the Object.prototype setter and can
+    // replace the result's prototype, so that key is dropped. Every other key, "constructor"
+    // included, only ever shadows an inherited member and is kept as ordinary data.
+    if (key === "__proto__") {
       continue;
     }
 
-    if (Object.hasOwn(result, key)) {
+    // result.hasOwnProperty(key) breaks once a param is itself named "hasOwnProperty".
+    if (Object.prototype.hasOwnProperty.call(result, key)) {
       const currentValue = result[key];
       if (Array.isArray(currentValue)) {
         currentValue.push(value);

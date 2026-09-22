@@ -109,16 +109,30 @@ describe("fromEntriesWithDuplicateKeys", () => {
       });
     });
 
-    it("should protect against prototype pollution by skipping __proto__ and constructor", () => {
+    it("should skip __proto__ without polluting Object.prototype", () => {
       const entries: [string, string][] = [
         ["__proto__", "malicious"],
-        ["constructor", "malicious"],
+        ["__proto__", "malicious2"],
         ["safeKey", "safeValue"],
       ];
 
       const result = fromEntriesWithDuplicateKeys(entries);
+
       expect(result).toEqual({ safeKey: "safeValue" });
-      expect(({} as Record<string, unknown>).__proto__).not.toEqual("malicious");
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+      expect(({} as Record<string, unknown>).malicious).toBeUndefined();
+    });
+
+    it("should keep a key named constructor as ordinary data", () => {
+      const entries: [string, string][] = [
+        ["constructor", "acme"],
+        ["constructor", "acme2"],
+      ];
+
+      const result = fromEntriesWithDuplicateKeys(entries);
+
+      expect(result.constructor).toEqual(["acme", "acme2"]);
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
   });
 });

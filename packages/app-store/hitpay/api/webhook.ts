@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type z from "zod";
 
@@ -11,6 +10,7 @@ import prisma from "@calcom/prisma";
 
 import appConfig from "../config.json";
 import type { hitpayCredentialKeysSchema } from "../lib/hitpayCredentialKeysSchema";
+import { isValidWebhookSignature } from "../lib/verifyWebhookSignature";
 
 export const config = {
   api: {
@@ -30,26 +30,6 @@ interface WebhookReturn {
 }
 
 type ExcludedWebhookReturn = Omit<WebhookReturn, "hmac">;
-
-/**
- * Generates an HMAC SHA-256 signature for HitPay webhook payload.
- *
- * @param secret - The salt key used to sign the payload.
- * @param vals - The key-value pairs from the webhook payload excluding HMAC.
- * @returns The hex-encoded HMAC SHA-256 signature.
- */
-function generateSignatureArray<T>(secret: string, vals: T) {
-  const source: string[] = [];
-  Object.keys(vals as { [K: string]: string })
-    .sort()
-    .forEach((key) => {
-      source.push(`${key}${(vals as { [K: string]: string })[key]}`);
-    });
-  const payload = source.join("");
-  const hmac = createHmac("sha256", secret);
-  const signed = hmac.update(payload, "utf-8").digest("hex");
-  return signed;
-}
 
 /**
  * Handles incoming HitPay payment webhooks with constant-time HMAC signature verification.
@@ -115,15 +95,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    if (!obj.hmac || typeof obj.hmac !== "string") {
-      throw new HttpCode({ statusCode: 400, message: "Bad Request" });
-    }
-
     const { saltKey } = keyObj;
-    const signed = generateSignatureArray(saltKey, excluded as ExcludedWebhookReturn);
-    const expected = Buffer.from(signed);
-    const actual = Buffer.from(obj.hmac);
-    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    if (!isValidWebhookSignature(saltKey, excluded as ExcludedWebhookReturn, obj.hmac)) {
       throw new HttpCode({ statusCode: 400, message: "Bad Request" });
     }
 

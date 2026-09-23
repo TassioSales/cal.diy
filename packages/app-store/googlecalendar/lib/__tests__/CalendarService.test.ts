@@ -935,6 +935,7 @@ describe("updateEvent", () => {
     const patchCall = eventsPatchMock.mock.calls[0][0];
     expect(patchCall.calendarId).toBe("primary");
     expect(patchCall.eventId).toBe("existing-event-id");
+    expect(patchCall.sendUpdates).toBe("none");
     expect(patchCall.requestBody.location).toBe(mockHangoutLink);
     expect(patchCall.requestBody.description).toBeDefined();
 

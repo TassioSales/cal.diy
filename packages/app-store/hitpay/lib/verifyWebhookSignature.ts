@@ -7,7 +7,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * @see https://docs.hit-pay.com/api/webhooks
  */
 export function generateWebhookSignature(saltKey: string, payload: Record<string, string>): string {
+  // The exclusion belongs here rather than in the caller: a caller that hands over the payload
+  // as received, `hmac` included, would otherwise sign a different string and reject a valid
+  // webhook.
   const source = Object.keys(payload)
+    .filter((key) => key !== "hmac")
     .sort()
     .map((key) => `${key}${payload[key]}`)
     .join("");

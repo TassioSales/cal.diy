@@ -59,6 +59,13 @@ describe("generateWebhookSignature", () => {
       generateWebhookSignature(SALT_KEY, payload)
     );
   });
+
+  it("ignores an hmac field in the payload it is given", () => {
+    const signature = generateWebhookSignature(SALT_KEY, payload);
+
+    expect(generateWebhookSignature(SALT_KEY, { ...payload, hmac: signature })).toBe(signature);
+    expect(generateWebhookSignature(SALT_KEY, { ...payload, hmac: "anything at all" })).toBe(signature);
+  });
 });
 
 describe("isValidWebhookSignature", () => {
@@ -114,6 +121,12 @@ describe("isValidWebhookSignature", () => {
   ])("rejects %s instead of throwing", (_label, received) => {
     expect(() => isValidWebhookSignature(SALT_KEY, payload, received)).not.toThrow();
     expect(isValidWebhookSignature(SALT_KEY, payload, received)).toBe(false);
+  });
+
+  it("accepts the payload as received, hmac field included", () => {
+    const signature = generateWebhookSignature(SALT_KEY, payload);
+
+    expect(isValidWebhookSignature(SALT_KEY, { ...payload, hmac: signature }, signature)).toBe(true);
   });
 
   it("rejects a valid signature once a field is removed from the payload", () => {

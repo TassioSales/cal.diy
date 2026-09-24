@@ -374,22 +374,57 @@ export class LuckyUserService implements ILuckyUserService {
       return totalCalibration;
     }, 0);
 
+    // Indexed once rather than re-scanned per host: the three lookups below were each walking a
+    // whole collection for every available user, and the booking scan walked every attendee too.
+    const weightByUserId = attributeWeights
+      ? new Map(attributeWeights.map((entry) => [entry.userId, entry.weight ?? 100]))
+      : null;
+    const calibrationByUserId = new Map(
+      allHostsWithCalibration.map((host) => [host.userId, host.calibration])
+    );
+
+    // A booking can match a user both as its organiser and through an attendee, so the two indexes
+    // hold references to the same bookings and are unioned per user instead of counted twice.
+    const bookingsByUserId = new Map<number, PartialBooking[]>();
+    const bookingsByAttendeeEmail = new Map<string, PartialBooking[]>();
+    for (const booking of bookingsOfAvailableUsersOfInterval) {
+      if (booking.userId !== null && booking.userId !== undefined) {
+        const bookings = bookingsByUserId.get(booking.userId);
+        if (bookings) {
+          bookings.push(booking);
+        } else {
+          bookingsByUserId.set(booking.userId, [booking]);
+        }
+      }
+      for (const attendee of booking.attendees) {
+        // A null attendee email could never equal a user's, which is non-null on PartialUser.
+        if (attendee.email === null) {
+          continue;
+        }
+        const bookings = bookingsByAttendeeEmail.get(attendee.email);
+        if (bookings) {
+          bookings.push(booking);
+        } else {
+          bookingsByAttendeeEmail.set(attendee.email, [booking]);
+        }
+      }
+    }
+
     const usersWithBookingShortfalls = availableUsers.map((user) => {
       let userWeight = user.weight ?? 100;
-      if (attributeWeights) {
-        userWeight = attributeWeights.find((userWeight) => userWeight.userId === user.id)?.weight ?? 100;
+      if (weightByUserId) {
+        userWeight = weightByUserId.get(user.id) ?? 100;
       }
       const targetPercentage = userWeight / totalWeight;
-      const userBookings = bookingsOfAvailableUsersOfInterval.filter(
-        (booking) =>
-          booking.userId === user.id || booking.attendees.some((attendee) => attendee.email === user.email)
-      );
+      const userBookings = new Set([
+        ...(bookingsByUserId.get(user.id) ?? []),
+        ...(bookingsByAttendeeEmail.get(user.email) ?? []),
+      ]);
 
       const targetNumberOfBookings = (allBookings.length + totalCalibration) * targetPercentage;
-      const userCalibration =
-        allHostsWithCalibration.find((host) => host.userId === user.id)?.calibration ?? 0;
+      const userCalibration = calibrationByUserId.get(user.id) ?? 0;
 
-      const bookingShortfall = targetNumberOfBookings - (userBookings.length + userCalibration);
+      const bookingShortfall = targetNumberOfBookings - (userBookings.size + userCalibration);
 
       return {
         ...user,
@@ -397,7 +432,7 @@ export class LuckyUserService implements ILuckyUserService {
         weight: userWeight,
         targetNumberOfBookings,
         bookingShortfall,
-        numBookings: userBookings.length,
+        numBookings: userBookings.size,
       };
     });
 
@@ -857,8 +892,12 @@ export class LuckyUserService implements ILuckyUserService {
         (booking) => booking.userId === luckyUser.id
       ).length;
       remainingAvailableUsers = remainingAvailableUsers.filter((user) => user.id !== luckyUser.id);
+      // The id list was being rebuilt inside the filter callback, once per booking, and then
+      // scanned linearly — O(bookings x hosts) on every pass of a loop that already runs once per
+      // host.
+      const remainingAvailableUserIds = new Set(remainingAvailableUsers.map((user) => user.id));
       bookingsOfRemainingAvailableUsersOfInterval = bookingsOfRemainingAvailableUsersOfInterval.filter(
-        (booking) => remainingAvailableUsers.map((user) => user.id).includes(booking.userId ?? 0)
+        (booking) => remainingAvailableUserIds.has(booking.userId ?? 0)
       );
     }
 

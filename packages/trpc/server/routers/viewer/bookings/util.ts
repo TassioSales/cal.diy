@@ -4,7 +4,6 @@ import type {
   EventType,
   BookingReference,
   Attendee,
-  Credential,
   DestinationCalendar,
   User,
 } from "@calcom/prisma/client";
@@ -39,7 +38,6 @@ export const bookingsProcedure = authedProcedure
       user: {
         include: {
           destinationCalendar: true,
-          credentials: true,
           profiles: {
             select: {
               organizationId: true,
@@ -114,7 +112,6 @@ export type BookingsProcedureContext = {
     user:
       | (User & {
           destinationCalendar: DestinationCalendar | null;
-          credentials: Credential[];
           profiles: { organizationId: number }[];
         })
       | null;
